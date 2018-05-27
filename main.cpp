@@ -384,7 +384,6 @@ void laplacianEdit(Eigen::RowVector3d newHandle, Eigen::RowVector3d oldHandle, i
       pre_error = error;
       error = 0;
       for (int i = 0; i < simulatedIndices.rows(); i++) {
-
           int count = 0;
           Eigen::VectorXd b_0 = Eigen::VectorXd::Zero((numberNeighbours(simulatedIndices(i)) + 1) * 3);
           b_0(count) = Vprime(simulatedIndices(i), 0);
@@ -453,23 +452,22 @@ void laplacianEdit(Eigen::RowVector3d newHandle, Eigen::RowVector3d oldHandle, i
           T << Coeff(0, 0), -Coeff(3, 0), Coeff(2, 0), Coeff(4, 0), Coeff(3, 0), Coeff(0, 0), -Coeff(1, 0),
                   Coeff(5, 0), -Coeff(2, 0), Coeff(1, 0), Coeff(0, 0), Coeff(6, 0), 0, 0, 0, 1;
 
-
-          // // Compute error
+          // Compute error
           // Eigen::VectorXd currentError = T * HomDelta.row(0).transpose();
           // currentError -= HomDeltaPrime.row(0).transpose();
           // error += currentError.squaredNorm();
 
-          // // update V
-          // Eigen::VectorXd currentRow(4);
-          // currentRow(0) = V(simulatedIndices(i),0);
-          // currentRow(1) = V(simulatedIndices(i),1);
-          // currentRow(2) = V(simulatedIndices(i),2);
-          // currentRow(3) = 1;
-          // currentRow = T * currentRow;
+          // update V
+          Eigen::VectorXd currentRow(4);
+          currentRow(0) = V(simulatedIndices(i),0);
+          currentRow(1) = V(simulatedIndices(i),1);
+          currentRow(2) = V(simulatedIndices(i),2);
+          currentRow(3) = 1;
+          currentRow = T * currentRow;
 
-          // V(simulatedIndices(i),0) = currentRow(0);
-          // V(simulatedIndices(i),1) = currentRow(1);
-          // V(simulatedIndices(i),2) = currentRow(2);
+          V(simulatedIndices(i),0) = currentRow(0);
+          V(simulatedIndices(i),1) = currentRow(1);
+          V(simulatedIndices(i),2) = currentRow(2);
       }
       std::cout << "error: " << error << std::endl;
   }
