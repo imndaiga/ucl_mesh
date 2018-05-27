@@ -12,23 +12,26 @@
 
 #include "main.h"
 
+using namespace std;
+using namespace Eigen;
+
 // Setup constants
-typedef Eigen::Triplet<double> T;
+typedef Triplet<double> T;
 int HANDLE_MODE = 0, NO_MODE = 1;
-Eigen::RowVector3d RED(255.0/255.0, 0.0/255.0, 0.0/255.0);
-Eigen::RowVector3d WHITE(255.0/255.0, 255.0/255.0, 255.0/255.0);
-Eigen::RowVector3d GREY(125.0/255.0, 125.0/255.0, 125.0/255.0);
-Eigen::RowVector3d GOLD(255.0/255.0, 228.0/255.0, 58.0/255.0);
-Eigen::RowVector3d GREEN(70./255.,252./255.,167./255.);
+RowVector3d RED(255.0/255.0, 0.0/255.0, 0.0/255.0);
+RowVector3d WHITE(255.0/255.0, 255.0/255.0, 255.0/255.0);
+RowVector3d GREY(125.0/255.0, 125.0/255.0, 125.0/255.0);
+RowVector3d GOLD(255.0/255.0, 228.0/255.0, 58.0/255.0);
+RowVector3d GREEN(70./255.,252./255.,167./255.);
 
 // Setup global variables
-Eigen::MatrixXd C, V, origV, boxV(8, 3), AA, AN, ANK, H, K;
-Eigen::MatrixXi E, F, N, boxE(12, 2);
-Eigen::RowVector3d boundMin, boundMax, baryC, prevHandle, handle, posROI;
-Eigen::VectorXd numberNeighbours;
-std::string offModel = "cow";
-std::vector<int> v_roi;
-std::vector<T> m_coeffs, c_coeffs, l_coeffs;
+MatrixXd C, V, origV, boxV(8, 3), AA, AN, ANK, H, K;
+MatrixXi E, F, N, boxE(12, 2);
+RowVector3d boundMin, boundMax, baryC, prevHandle, handle, posROI;
+VectorXd numberNeighbours;
+string offModel = "cow";
+vector<int> v_roi;
+vector<T> m_coeffs, c_coeffs, l_coeffs;
 
 float boundDiag;
 bool firstRun = true, cotanMode = true, simpleCostMode;
@@ -42,9 +45,9 @@ void ComputeAreasAndAngles() {
 
   // Initialize storage matrices:
   //  AA -> Areas, AN -> Alpha and Beta Angles, ANK -> Theta Angles
-  AA = Eigen::MatrixXd::Zero(V.rows(), 1);
-  AN = Eigen::MatrixXd::Zero(F.rows(), V.cols());
-  ANK = Eigen::MatrixXd::Zero(V.rows(), 1);
+  AA = MatrixXd::Zero(V.rows(), 1);
+  AN = MatrixXd::Zero(F.rows(), V.cols());
+  ANK = MatrixXd::Zero(V.rows(), 1);
 
   for (int f = 0; f < F.rows(); f++) {
     // Compute the magnitudes of each face edge
@@ -96,11 +99,11 @@ void ComputeCotanAngles() {
   }
 }
 
-Eigen::MatrixXi getNeighbours(Eigen::MatrixXd &V, Eigen::MatrixXi &F, Eigen::MatrixXi &E, Eigen::VectorXd &number){
+MatrixXi getNeighbours(MatrixXd &V, MatrixXi &F, MatrixXi &E, VectorXd &number){
 
   // initialising of matrices
-  Eigen::MatrixXi N = Eigen::MatrixXi::Zero(V.rows(), V.rows());
-  number = Eigen::VectorXd::Zero(V.rows());
+  MatrixXi N = MatrixXi::Zero(V.rows(), V.rows());
+  number = VectorXd::Zero(V.rows());
 
   // construct edge-matrix
   igl::edges(F, E);
@@ -135,7 +138,7 @@ void loadMesh() {
 
   viewer.data().clear();
   viewer.data().set_mesh(V, F);
-  C = Eigen::MatrixXd::Constant(F.rows(), 3, 1);
+  C = MatrixXd::Constant(F.rows(), 3, 1);
   viewer.data().set_colors(C);
   viewer.core.align_camera_center(V, F);
 
@@ -150,7 +153,7 @@ void loadMesh() {
   }
 }
 
-bool isContained(Eigen::RowVector3d point) {
+bool isContained(RowVector3d point) {
   bool inX = false;
   bool inY = false;
   bool inZ = false;
@@ -179,7 +182,7 @@ bool isContained(Eigen::RowVector3d point) {
   return (inX && inY && inZ);
 }
 
-void drawBoundBox(Eigen::RowVector3d boxMax, Eigen::RowVector3d boxMin, Eigen::RowVector3d posVec, float scaleL, float scaleW, float scaleH) {
+void drawBoundBox(RowVector3d boxMax, RowVector3d boxMin, RowVector3d posVec, float scaleL, float scaleW, float scaleH) {
   // TODO: Scale variables scaleL and scaleW should be used to resize the bounding box
 
   // If no handle has been fixed on the mesh, then return
@@ -224,7 +227,7 @@ bool keyDownCallback(igl::opengl::glfw::Viewer& viewer, unsigned char key, int m
   {
     case 'C':
     {
-      std::cout << "No Mode." << std::endl;
+      cout << "No Mode." << endl;
       mode = NO_MODE;
       return false;
     }
@@ -238,14 +241,14 @@ bool mouseDownCallback(igl::opengl::glfw::Viewer& viewer, int, int) {
   double y = viewer.core.viewport(3) - viewer.current_mouse_y;
   float minDist;
 
-  if (igl::unproject_onto_mesh(Eigen::Vector2f(x,y), viewer.core.view * viewer.core.model,
+  if (igl::unproject_onto_mesh(Vector2f(x,y), viewer.core.view * viewer.core.model,
     viewer.core.proj, viewer.core.viewport, V, F, fid, baryC) && mode != NO_MODE)
   {
-    C = Eigen::MatrixXd::Constant(F.rows(), 3, 1);
+    C = MatrixXd::Constant(F.rows(), 3, 1);
 
     // Compute nearest vertex to barycenter point baryC
     // BUG: The camera align function centers the frame such that the nearest vertex is not regular across the mesh.
-    // std::cout << baryC << std::endl << V.row(F.row(fid)[0]) << " " << (baryC - V.row(F.row(fid)[0])).norm() << std::endl << V.row(F.row(fid)[1])  << " " << (baryC - V.row(F.row(fid)[1])).norm() << std::endl << V.row(F.row(fid)[2]) << " " << (baryC - V.row(F.row(fid)[2])).norm() << std::endl;
+    // cout << baryC << endl << V.row(F.row(fid)[0]) << " " << (baryC - V.row(F.row(fid)[0])).norm() << endl << V.row(F.row(fid)[1])  << " " << (baryC - V.row(F.row(fid)[1])).norm() << endl << V.row(F.row(fid)[2]) << " " << (baryC - V.row(F.row(fid)[2])).norm() << endl;
     for (int c = 0; c < V.cols(); c++) {
       float bcDist = (baryC - V.row(F.row(fid)[c])).norm();
 
@@ -278,9 +281,9 @@ bool mouseDownCallback(igl::opengl::glfw::Viewer& viewer, int, int) {
   return false;
 }
 
-void computeMeanCurvature(Eigen::SparseMatrix<double> & L, Eigen::MatrixXd & H) {
+void computeMeanCurvature(SparseMatrix<double> & L, MatrixXd & H) {
   //    Compute Mean Curvature using the formula H = ||UL*x||/2
-  Eigen::MatrixXd Lx(V.rows(), V.cols());
+  MatrixXd Lx(V.rows(), V.cols());
 
   for (int c = 0; c < V.cols(); c++) {
       Lx.col(c) = L * V.col(c);
@@ -289,8 +292,8 @@ void computeMeanCurvature(Eigen::SparseMatrix<double> & L, Eigen::MatrixXd & H) 
   H = Lx.rowwise().norm()/2;
 }
 
-void computeGaussianCurvature(bool & normalized, Eigen::MatrixXd & K) {
-  K = Eigen::MatrixXd::Zero(V.rows(), 1);
+void computeGaussianCurvature(bool & normalized, MatrixXd & K) {
+  K = MatrixXd::Zero(V.rows(), 1);
 
   // Check if normalization flag is set
   // Then compute Gaussian curvature appropriately
@@ -305,10 +308,10 @@ void computeGaussianCurvature(bool & normalized, Eigen::MatrixXd & K) {
   }
 }
 
-void computeLaplace(Eigen::MatrixXd &V, Eigen::SparseMatrix<double> &Laplace, Eigen::VectorXd &numberNeighbours, Eigen::MatrixXi &N, bool cotangentMode){
+void computeLaplace(MatrixXd &V, SparseMatrix<double> &Laplace, VectorXd &numberNeighbours, MatrixXi &N, bool cotangentMode){
 
     if (!cotangentMode) {
-      std::vector<T> tripletList;
+      vector<T> tripletList;
 
       for(int i=0; i < V.rows(); i++) {
           // fill diagonal of Laplacian
@@ -321,7 +324,7 @@ void computeLaplace(Eigen::MatrixXd &V, Eigen::SparseMatrix<double> &Laplace, Ei
       // set sparse matrix
       Laplace.setFromTriplets(tripletList.begin(), tripletList.end());
     } else {
-      Eigen::SparseMatrix<double> LM(V.rows(), V.rows()), LC(V.rows(), V.rows()), LM_inv(V.rows(), V.rows());
+      SparseMatrix<double> LM(V.rows(), V.rows()), LC(V.rows(), V.rows()), LM_inv(V.rows(), V.rows());
 
       ComputeCotanAngles();
       LM.setFromTriplets(m_coeffs.begin(), m_coeffs.end());
@@ -331,50 +334,50 @@ void computeLaplace(Eigen::MatrixXd &V, Eigen::SparseMatrix<double> &Laplace, Ei
     }
 }
 
-void laplacianEdit(Eigen::RowVector3d newHandle, Eigen::RowVector3d oldHandle, int handleVInd, std::vector<int> vROI, Eigen::MatrixXd &V) {
-  // std::cout << vROI.size() << std::endl << handleVInd << std::endl << oldHandle << std::endl << newHandle << std::endl;
+void laplacianEdit(RowVector3d newHandle, RowVector3d oldHandle, int handleVInd, vector<int> vROI, MatrixXd &V) {
+  // cout << vROI.size() << endl << handleVInd << endl << oldHandle << endl << newHandle << endl;
 
   // Homogeneous coordinates of V
-  Eigen::VectorXd ones = Eigen::VectorXd::Ones(V.rows());
-  Eigen::MatrixXd Vhom(V.rows(), V.cols()+1);
+  VectorXd ones = VectorXd::Ones(V.rows());
+  MatrixXd Vhom(V.rows(), V.cols()+1);
   Vhom << V, ones;
 
   // compute uniform Laplace
-  Eigen::SparseMatrix<double> Laplace(V.rows(), V.rows());
+  SparseMatrix<double> Laplace(V.rows(), V.rows());
   computeLaplace(V, Laplace, numberNeighbours, N, cotanMode);
 
   // compute Laplacian Coordinates
-  Eigen::SparseMatrix<double> Delta;
+  SparseMatrix<double> Delta;
 
-  Eigen::SparseMatrix<double> Vsparse = V.sparseView();
+  SparseMatrix<double> Vsparse = V.sparseView();
   Delta = Laplace * Vsparse;
 
-  std::cout << Delta.row(0) << std::endl;
-  std::cout << Delta.row(1) << std::endl;
+  cout << Delta.row(0) << endl;
+  cout << Delta.row(1) << endl;
 
-  Eigen::SparseMatrix<double> Ones = ones.sparseView();
-  Eigen::SparseMatrix<double> HomDelta;
+  SparseMatrix<double> Ones = ones.sparseView();
+  SparseMatrix<double> HomDelta;
   igl::cat(2, Delta, Ones, HomDelta);
 
   // Compute positions VPrime
-  Eigen::Vector3d handleMovement;
+  Vector3d handleMovement;
   handleMovement = newHandle - oldHandle;
   // Apply handleMovement to each vertex in ROI
-  Eigen::VectorXd simulatedIndices(vROI.size());
-  Eigen::MatrixXd Vprime(V.rows(), V.cols());
+  VectorXd simulatedIndices(vROI.size());
+  MatrixXd Vprime(V.rows(), V.cols());
   Vprime = V;
   for(int i = 0; i < vROI.size(); i++){
-    Eigen::Vector3d currentRow = Vprime.row(vROI[i]).transpose();
+    Vector3d currentRow = Vprime.row(vROI[i]).transpose();
     currentRow += handleMovement;
     Vprime.row(vROI[i]) = currentRow.transpose();
     simulatedIndices(i) = vROI[i];
   }
 
-  Eigen::SparseMatrix<double> DeltaPrime;
-  Eigen::SparseMatrix<double> VPrimeSparse = Vprime.sparseView();
+  SparseMatrix<double> DeltaPrime;
+  SparseMatrix<double> VPrimeSparse = Vprime.sparseView();
   DeltaPrime = Laplace * VPrimeSparse;
 
-  Eigen::SparseMatrix<double> HomDeltaPrime;
+  SparseMatrix<double> HomDeltaPrime;
   igl::cat(2, DeltaPrime, Ones, HomDeltaPrime);
 
   double error = 1;
@@ -385,7 +388,7 @@ void laplacianEdit(Eigen::RowVector3d newHandle, Eigen::RowVector3d oldHandle, i
       error = 0;
       for (int i = 0; i < simulatedIndices.rows(); i++) {
           int count = 0;
-          Eigen::VectorXd b_0 = Eigen::VectorXd::Zero((numberNeighbours(simulatedIndices(i)) + 1) * 3);
+          VectorXd b_0 = VectorXd::Zero((numberNeighbours(simulatedIndices(i)) + 1) * 3);
           b_0(count) = Vprime(simulatedIndices(i), 0);
           count++;
           b_0(count) = Vprime(simulatedIndices(i), 1);
@@ -402,7 +405,7 @@ void laplacianEdit(Eigen::RowVector3d newHandle, Eigen::RowVector3d oldHandle, i
           }
 
           //build A
-          Eigen::MatrixXd A_0 = Eigen::MatrixXd::Zero((numberNeighbours(simulatedIndices(i)) + 1) * 3, 7);
+          MatrixXd A_0 = MatrixXd::Zero((numberNeighbours(simulatedIndices(i)) + 1) * 3, 7);
           count = 0;
           //add vertix i
           A_0(count, 0) = V(simulatedIndices(i), 0);
@@ -440,7 +443,7 @@ void laplacianEdit(Eigen::RowVector3d newHandle, Eigen::RowVector3d oldHandle, i
               count++;
           }
 
-          Eigen::MatrixXd Coeff;
+          MatrixXd Coeff;
           Coeff = A_0.transpose() * A_0;
           Coeff = Coeff.inverse();
           Coeff = Coeff * A_0.transpose();
@@ -448,17 +451,17 @@ void laplacianEdit(Eigen::RowVector3d newHandle, Eigen::RowVector3d oldHandle, i
           //cout << "Coeff: " << Coeff.transpose() << endl;
 
           // build T
-          Eigen::MatrixXd T(4, 4);
+          MatrixXd T(4, 4);
           T << Coeff(0, 0), -Coeff(3, 0), Coeff(2, 0), Coeff(4, 0), Coeff(3, 0), Coeff(0, 0), -Coeff(1, 0),
                   Coeff(5, 0), -Coeff(2, 0), Coeff(1, 0), Coeff(0, 0), Coeff(6, 0), 0, 0, 0, 1;
 
           // Compute error
-          // Eigen::VectorXd currentError = T * HomDelta.row(0).transpose();
+          // VectorXd currentError = T * HomDelta.row(0).transpose();
           // currentError -= HomDeltaPrime.row(0).transpose();
           // error += currentError.squaredNorm();
 
           // update V
-          Eigen::VectorXd currentRow(4);
+          VectorXd currentRow(4);
           currentRow(0) = V(simulatedIndices(i),0);
           currentRow(1) = V(simulatedIndices(i),1);
           currentRow(2) = V(simulatedIndices(i),2);
@@ -469,7 +472,7 @@ void laplacianEdit(Eigen::RowVector3d newHandle, Eigen::RowVector3d oldHandle, i
           V(simulatedIndices(i),1) = currentRow(1);
           V(simulatedIndices(i),2) = currentRow(2);
       }
-      std::cout << "error: " << error << std::endl;
+      cout << "error: " << error << endl;
   }
   viewer.data().set_mesh(V, F);
 }
@@ -568,8 +571,8 @@ void initGUI() {
       }
       // Shade ROI for Visual Inspection
       if (ImGui::Button("Shade ROI", ImVec2(-1,0))) {
-        Eigen::MatrixXd VC;
-        VC = Eigen::MatrixXd::Constant(V.rows(), 3, 1);
+        MatrixXd VC;
+        VC = MatrixXd::Constant(V.rows(), 3, 1);
 
         for (int i=0; i < v_roi.size(); i++) {
           VC.row(v_roi[i]) = GREEN;
@@ -592,28 +595,28 @@ void initGUI() {
       ImGui::Checkbox("Simple Cost", &simpleCostMode);
 
       if (ImGui::Button("Execute", ImVec2(-1,0))) {
-        laplacianEdit(Eigen::RowVector3d(double(handleX), double(handleY), double(handleZ)), handle, handleInd, v_roi, V);
+        laplacianEdit(RowVector3d(double(handleX), double(handleY), double(handleZ)), handle, handleInd, v_roi, V);
       }
       ImGui::Separator();
 
       if (ImGui::Button("Apply Uniform Mean Curvature", ImVec2(-1,0))) {
-        Eigen::SparseMatrix<double> L(V.rows(), V.rows());
-        Eigen::MatrixXd COLOR;
+        SparseMatrix<double> L(V.rows(), V.rows());
+        MatrixXd COLOR;
 
         computeLaplace(V, L, numberNeighbours, N, cotanMode);
         computeMeanCurvature(L, H);
         igl::jet(H, true, COLOR);
         viewer.data().set_colors(COLOR);
-        std::cout << "Applied Mean Curvature" << std::endl;
+        cout << "Applied Mean Curvature" << endl;
       }
       if (ImGui::Button("Apply Uniform Gaussian Curvature", ImVec2(-1,0))) {
-        Eigen::MatrixXd COLOR;
+        MatrixXd COLOR;
         bool normalized = true;
 
         computeGaussianCurvature(normalized, K);
         igl::jet(K, true, COLOR);
         viewer.data().set_colors(COLOR);
-        std::cout << "Applied Gaussian Curvature" << std::endl;
+        cout << "Applied Gaussian Curvature" << endl;
       }
       ImGui::Separator();
 
