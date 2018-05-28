@@ -29,7 +29,7 @@ MatrixXd C, V, origV, boxV(8, 3), AA, AN, ANK, H, K;
 MatrixXi E, F, N, boxE(12, 2);
 RowVector3d boundMin, boundMax, baryC, prevHandle, handle, posROI;
 VectorXd numberNeighbours;
-string offModel = "cow";
+string offModel = "helix";
 vector<int> v_roi;
 vector<T> m_coeffs, c_coeffs, l_coeffs;
 
@@ -335,12 +335,50 @@ void computeLaplace(MatrixXd &V, SparseMatrix<double> &Laplace, VectorXd &number
 }
 
 void laplacianEdit(RowVector3d newHandle, RowVector3d oldHandle, int handleVInd, vector<int> vROI, MatrixXd &V) {
-  // cout << vROI.size() << endl << handleVInd << endl << oldHandle << endl << newHandle << endl;
+  // Compute positions VPrime
+  Vector3d handleMovement;
+  handleMovement = newHandle - oldHandle;
+  VectorXd simulatedIndices(vROI.size());
+  MatrixXd Vprime(V.rows(), V.cols());
+
+  //Toggle for evalution transformation
+  bool evaluation = true;
+  if(evaluation){
+    // Adding predefined transformation to evaluate performance
+    Vprime = V;
+    MatrixXd rotation(3,3);
+    double rot_angle = 5*M_PI/180;
+    rotation << cos(rot_angle), -sin(rot_angle), 0, sin(rot_angle), cos(rot_angle), 0, 0, 0, 1;
+    cout << rotation << endl;
+    Vector3d translation(3);
+    translation << -2,2,0;
+    cout << rotation*translation << endl;
+    MatrixXd cPoint;
+    cPoint=(rotation*V.transpose()).colwise() + translation;
+    MatrixXd shiftedVprime = cPoint.transpose();
+    for(int i = 0; i < vROI.size(); i++){
+      simulatedIndices(i) = vROI[i];
+      Vprime.row(vROI[i]) = shiftedVprime.row(vROI[i]);
+    }
+  }
+  else{
+    // Apply handleMovement from GUI to each vertex in ROI
+    Vprime = V;
+    for(int i = 0; i < vROI.size(); i++){
+      Vector3d currentRow = Vprime.row(vROI[i]).transpose();
+      currentRow += handleMovement;
+      Vprime.row(vROI[i]) = currentRow.transpose();
+      simulatedIndices(i) = vROI[i];
+    }
+  }
 
   // Homogeneous coordinates of V
   VectorXd ones = VectorXd::Ones(V.rows());
   MatrixXd Vhom(V.rows(), V.cols()+1);
   Vhom << V, ones;
+
+  // compute number of neighbours and store neighbours per vertex
+  MatrixXi N = getNeighbours(V,F,E,numberNeighbours);
 
   // compute uniform Laplace
   SparseMatrix<double> Laplace(V.rows(), V.rows());
@@ -352,26 +390,10 @@ void laplacianEdit(RowVector3d newHandle, RowVector3d oldHandle, int handleVInd,
   SparseMatrix<double> Vsparse = V.sparseView();
   Delta = Laplace * Vsparse;
 
-  cout << Delta.row(0) << endl;
-  cout << Delta.row(1) << endl;
-
   SparseMatrix<double> Ones = ones.sparseView();
   SparseMatrix<double> HomDelta;
   igl::cat(2, Delta, Ones, HomDelta);
 
-  // Compute positions VPrime
-  Vector3d handleMovement;
-  handleMovement = newHandle - oldHandle;
-  // Apply handleMovement to each vertex in ROI
-  VectorXd simulatedIndices(vROI.size());
-  MatrixXd Vprime(V.rows(), V.cols());
-  Vprime = V;
-  for(int i = 0; i < vROI.size(); i++){
-    Vector3d currentRow = Vprime.row(vROI[i]).transpose();
-    currentRow += handleMovement;
-    Vprime.row(vROI[i]) = currentRow.transpose();
-    simulatedIndices(i) = vROI[i];
-  }
 
   SparseMatrix<double> DeltaPrime;
   SparseMatrix<double> VPrimeSparse = Vprime.sparseView();
@@ -380,100 +402,145 @@ void laplacianEdit(RowVector3d newHandle, RowVector3d oldHandle, int handleVInd,
   SparseMatrix<double> HomDeltaPrime;
   igl::cat(2, DeltaPrime, Ones, HomDeltaPrime);
 
-  double error = 1;
-  double pre_error = 0;
-  //while(error > pre_error) {
-  for(int h = 0; h < 1; h++){
-      pre_error = error;
-      error = 0;
-      for (int i = 0; i < simulatedIndices.rows(); i++) {
-          int count = 0;
-          VectorXd b_0 = VectorXd::Zero((numberNeighbours(simulatedIndices(i)) + 1) * 3);
-          b_0(count) = Vprime(simulatedIndices(i), 0);
-          count++;
-          b_0(count) = Vprime(simulatedIndices(i), 1);
-          count++;
-          b_0(count) = Vprime(simulatedIndices(i), 2);
-          count++;
-          for (int j = 0; j < numberNeighbours(simulatedIndices(i)); j++) {
-              b_0(count) = Vprime(N(simulatedIndices(i), j), 0);
-              count++;
-              b_0(count) = Vprime(N(simulatedIndices(i), j), 1);
-              count++;
-              b_0(count) = Vprime(N(simulatedIndices(i), j), 2);
-              count++;
-          }
 
-          //build A
-          MatrixXd A_0 = MatrixXd::Zero((numberNeighbours(simulatedIndices(i)) + 1) * 3, 7);
-          count = 0;
-          //add vertix i
-          A_0(count, 0) = V(simulatedIndices(i), 0);
-          A_0(count, 2) = V(simulatedIndices(i), 2);
-          A_0(count, 3) = -V(simulatedIndices(i), 1);
-          A_0(count, 4) = 1;
-          count++;
-          A_0(count, 0) = V(simulatedIndices(i), 1);
-          A_0(count, 1) = -V(simulatedIndices(i), 2);
-          A_0(count, 3) = V(simulatedIndices(i), 0);
-          A_0(count, 5) = 1;
-          count++;
-          A_0(count, 0) = V(simulatedIndices(i), 2);
-          A_0(count, 1) = V(simulatedIndices(i), 1);
-          A_0(count, 2) = -V(simulatedIndices(i), 0);
-          A_0(count, 6) = 1;
-          count++;
+  // Compute transformation
+  //simpleCostMode = true --> Equation (4) of paper
+  //simpleCostMode = false --> Equation (5) of paper
+  if(simpleCostMode){
 
-          //add neighbours
-          for (int j = 0; j < numberNeighbours(simulatedIndices(i)); j++) {
-              A_0(count, 0) = V(N(simulatedIndices(i), j), 0);
-              A_0(count, 2) = V(N(simulatedIndices(i), j), 2);
-              A_0(count, 3) = -V(N(simulatedIndices(i), j), 1);
-              A_0(count, 4) = 1;
-              count++;
-              A_0(count, 0) = V(N(simulatedIndices(i), j), 1);
-              A_0(count, 1) = -V(N(simulatedIndices(i), j), 2);
-              A_0(count, 3) = V(N(simulatedIndices(i), j), 0);
-              A_0(count, 5) = 1;
-              count++;
-              A_0(count, 0) = V(N(simulatedIndices(i), j), 2);
-              A_0(count, 1) = V(N(simulatedIndices(i), j), 1);
-              A_0(count, 2) = -V(N(simulatedIndices(i), j), 0);
-              A_0(count, 6) = 1;
-              count++;
-          }
+    // build A
+    SparseMatrix<double> A(V.rows(),V.rows());
+    A = Laplace.transpose()*Laplace;
 
-          MatrixXd Coeff;
-          Coeff = A_0.transpose() * A_0;
-          Coeff = Coeff.inverse();
-          Coeff = Coeff * A_0.transpose();
-          Coeff = Coeff * b_0;
-          //cout << "Coeff: " << Coeff.transpose() << endl;
+    //build b
+    SparseMatrix<double> b(V.rows(),3);
+    b = Laplace.transpose()*DeltaPrime;
 
-          // build T
-          MatrixXd T(4, 4);
-          T << Coeff(0, 0), -Coeff(3, 0), Coeff(2, 0), Coeff(4, 0), Coeff(3, 0), Coeff(0, 0), -Coeff(1, 0),
-                  Coeff(5, 0), -Coeff(2, 0), Coeff(1, 0), Coeff(0, 0), Coeff(6, 0), 0, 0, 0, 1;
+    SparseMatrix<double> x(V.rows(),3);
+    SimplicialLDLT<SparseMatrix<double> > solver;
+    solver.compute(A);
+    x = solver.solve(b);
 
-          // Compute error
-          // VectorXd currentError = T * HomDelta.row(0).transpose();
-          // currentError -= HomDeltaPrime.row(0).transpose();
-          // error += currentError.squaredNorm();
-
-          // update V
-          VectorXd currentRow(4);
-          currentRow(0) = V(simulatedIndices(i),0);
-          currentRow(1) = V(simulatedIndices(i),1);
-          currentRow(2) = V(simulatedIndices(i),2);
-          currentRow(3) = 1;
-          currentRow = T * currentRow;
-
-          V(simulatedIndices(i),0) = currentRow(0);
-          V(simulatedIndices(i),1) = currentRow(1);
-          V(simulatedIndices(i),2) = currentRow(2);
-      }
-      cout << "error: " << error << endl;
+    cout << "x: " << x.rows() << " " << x.cols() << endl;
+    //upadate V
+    V = MatrixXd(x);
   }
+  else{
+    // Homogeneous coordinates of V
+    VectorXd ones = VectorXd::Ones(V.rows());
+    MatrixXd Vhom(V.rows(), V.cols()+1);
+    Vhom << V, ones;
+
+    // compute number of neighbours and store neighbours per vertex
+    MatrixXi N = getNeighbours(V,F,E,numberNeighbours);
+
+    // compute uniform Laplace
+    SparseMatrix<double> Laplace(V.rows(), V.rows());
+    computeLaplace(V, Laplace, numberNeighbours, N, cotanMode);
+
+    // compute Laplacian Coordinates
+    SparseMatrix<double> Delta;
+
+    SparseMatrix<double> Vsparse = V.sparseView();
+    Delta = Laplace * Vsparse;
+
+    SparseMatrix<double> Ones = ones.sparseView();
+    SparseMatrix<double> HomDelta;
+    igl::cat(2, Delta, Ones, HomDelta);
+
+
+    SparseMatrix<double> DeltaPrime;
+    SparseMatrix<double> VPrimeSparse = Vprime.sparseView();
+    DeltaPrime = Laplace * VPrimeSparse;
+
+    SparseMatrix<double> HomDeltaPrime;
+    igl::cat(2, DeltaPrime, Ones, HomDeltaPrime);
+
+    for (int i = 0; i < simulatedIndices.rows(); i++) {
+
+        int count = 0;
+        //build b_i
+        VectorXd b_0 = VectorXd::Zero((numberNeighbours(simulatedIndices(i)) + 1) * 3);
+        b_0(count) = Vprime(simulatedIndices(i), 0);
+        count++;
+        b_0(count) = Vprime(simulatedIndices(i), 1);
+        count++;
+        b_0(count) = Vprime(simulatedIndices(i), 2);
+        count++;
+        for (int j = 0; j < numberNeighbours(simulatedIndices(i)); j++) {
+            b_0(count) = Vprime(N(simulatedIndices(i), j), 0);
+            count++;
+            b_0(count) = Vprime(N(simulatedIndices(i), j), 1);
+            count++;
+            b_0(count) = Vprime(N(simulatedIndices(i), j), 2);
+            count++;
+        }
+
+        //build A_i
+        MatrixXd A_0 = MatrixXd::Zero((numberNeighbours(simulatedIndices(i)) + 1) * 3, 7);
+        count = 0;
+        //add vertix i
+        A_0(count, 0) = V(simulatedIndices(i), 0);
+        A_0(count, 2) = V(simulatedIndices(i), 2);
+        A_0(count, 3) = -V(simulatedIndices(i), 1);
+        A_0(count, 4) = 1;
+        count++;
+        A_0(count, 0) = V(simulatedIndices(i), 1);
+        A_0(count, 1) = -V(simulatedIndices(i), 2);
+        A_0(count, 3) = V(simulatedIndices(i), 0);
+        A_0(count, 5) = 1;
+        count++;
+        A_0(count, 0) = V(simulatedIndices(i), 2);
+        A_0(count, 1) = V(simulatedIndices(i), 1);
+        A_0(count, 2) = -V(simulatedIndices(i), 0);
+        A_0(count, 6) = 1;
+        count++;
+
+        //add neighbours
+        for (int j = 0; j < numberNeighbours(simulatedIndices(i)); j++) {
+            A_0(count, 0) = V(N(simulatedIndices(i), j), 0);
+            A_0(count, 2) = V(N(simulatedIndices(i), j), 2);
+            A_0(count, 3) = -V(N(simulatedIndices(i), j), 1);
+            A_0(count, 4) = 1;
+            count++;
+            A_0(count, 0) = V(N(simulatedIndices(i), j), 1);
+            A_0(count, 1) = -V(N(simulatedIndices(i), j), 2);
+            A_0(count, 3) = V(N(simulatedIndices(i), j), 0);
+            A_0(count, 5) = 1;
+            count++;
+            A_0(count, 0) = V(N(simulatedIndices(i), j), 2);
+            A_0(count, 1) = V(N(simulatedIndices(i), j), 1);
+            A_0(count, 2) = -V(N(simulatedIndices(i), j), 0);
+            A_0(count, 6) = 1;
+            count++;
+        }
+
+        MatrixXd Coeff;
+        Coeff = A_0.transpose() * A_0;
+        Coeff = Coeff.inverse();
+        Coeff = Coeff * A_0.transpose();
+        Coeff = Coeff * b_0;
+
+        // build T_i
+        MatrixXd T(4, 4);
+        T << Coeff(0, 0), -Coeff(3, 0), Coeff(2, 0), Coeff(4, 0), Coeff(3, 0), Coeff(0, 0), -Coeff(1, 0),
+                Coeff(5, 0), -Coeff(2, 0), Coeff(1, 0), Coeff(0, 0), Coeff(6, 0), 0, 0, 0, 1;
+
+        // update V_i
+        VectorXd currentRow(4);
+        currentRow(0) = V(simulatedIndices(i),0);
+        currentRow(1) = V(simulatedIndices(i),1);
+        currentRow(2) = V(simulatedIndices(i),2);
+        currentRow(3) = 1;
+        currentRow = T * currentRow;
+
+        V(simulatedIndices(i),0) = currentRow(0);
+        V(simulatedIndices(i),1) = currentRow(1);
+        V(simulatedIndices(i),2) = currentRow(2);
+
+    }
+  }
+
   viewer.data().set_mesh(V, F);
 }
 
