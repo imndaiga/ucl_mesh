@@ -29,12 +29,12 @@ MatrixXd C, V, origV, boxV(8, 3), AA, AN, ANK, H, K;
 MatrixXi E, F, N, boxE(12, 2);
 RowVector3d boundMin, boundMax, baryC, prevHandle, handle, posROI;
 VectorXd numberNeighbours;
-string offModel = "helix";
-vector<int> v_roi;
+string offModel = "wave_low";
+vector<int> v_roi, constraints;
 vector<T> m_coeffs, c_coeffs, l_coeffs;
 
 float boundDiag;
-bool firstRun = true, cotanMode = true, simpleCostMode;
+bool firstRun = true, cotanMode, simpleCostMode, evaluation;
 int fid, mode, discretize, prevFid, handleInd;
 
 igl::opengl::glfw::Viewer viewer;
@@ -334,7 +334,7 @@ void computeLaplace(MatrixXd &V, SparseMatrix<double> &Laplace, VectorXd &number
     }
 }
 
-void laplacianEdit(RowVector3d newHandle, RowVector3d oldHandle, int handleVInd, vector<int> vROI, MatrixXd &V) {
+void laplacianEdit(RowVector3d newHandle, RowVector3d oldHandle, int handleVInd, vector<int> vROI, MatrixXd &V, vector<int> con) {
   // Compute positions VPrime
   Vector3d handleMovement;
   handleMovement = newHandle - oldHandle;
@@ -342,16 +342,15 @@ void laplacianEdit(RowVector3d newHandle, RowVector3d oldHandle, int handleVInd,
   MatrixXd Vprime(V.rows(), V.cols());
 
   //Toggle for evalution transformation
-  bool evaluation = true;
   if(evaluation){
     // Adding predefined transformation to evaluate performance
     Vprime = V;
     MatrixXd rotation(3,3);
-    double rot_angle = 5*M_PI/180;
+    double rot_angle = 0*M_PI/180;
     rotation << cos(rot_angle), -sin(rot_angle), 0, sin(rot_angle), cos(rot_angle), 0, 0, 0, 1;
     cout << rotation << endl;
     Vector3d translation(3);
-    translation << -2,2,0;
+    translation << 1,0,0;
     cout << rotation*translation << endl;
     MatrixXd cPoint;
     cPoint=(rotation*V.transpose()).colwise() + translation;
@@ -407,21 +406,54 @@ void laplacianEdit(RowVector3d newHandle, RowVector3d oldHandle, int handleVInd,
   //simpleCostMode = true --> Equation (4) of paper
   //simpleCostMode = false --> Equation (5) of paper
   if(simpleCostMode){
+    //number of vertices
+    int n = V.rows();
+    //number of constraints
+    int k = V.rows() - vROI.size();
 
-    // build A
-    SparseMatrix<double> A(V.rows(),V.rows());
-    A = Laplace.transpose()*Laplace;
+    SparseMatrix<double> A;
+    //Build lower part of A
+    SparseMatrix<double> I(k, k);
+    I.setIdentity();
+    SparseMatrix<double> Z(k, n-k);
+    Z.setZero();
+
+    SparseMatrix<double> lower_A(k, n);
+    igl::cat(2, Z, I, lower_A);
+    // get full A
+    igl::cat(1, Laplace, lower_A, A);
 
     //build b
-    SparseMatrix<double> b(V.rows(),3);
-    b = Laplace.transpose()*DeltaPrime;
+    SparseMatrix<double> b(n+k,3);
+    SparseMatrix<double> c(k,3);
+    std::vector<T> tripletListC;
+    // fill lower part with constraints
+    for(int i = 0; i < k; i++){
+      tripletListC.push_back(T(i,0, V(con[i],0)));
+      tripletListC.push_back(T(i,1, V(con[i],1)));
+      tripletListC.push_back(T(i,2, V(con[i],2)));
+    }
+    c.setFromTriplets(tripletListC.begin(), tripletListC.end());
 
-    SparseMatrix<double> x(V.rows(),3);
-    SimplicialLDLT<SparseMatrix<double> > solver;
+    igl::cat(1, DeltaPrime, c, b);
+
+    A.makeCompressed();
+    // solve linear sparse system
+    SparseMatrix<double> x;
+    SparseQR<SparseMatrix<double, ColMajor>, COLAMDOrdering<int> >   solver;
     solver.compute(A);
+    if(solver.info()!=Success) {
+      // decomposition failed
+      cout << "decomposition failed" << endl;
+      return;
+    }
     x = solver.solve(b);
+    if(solver.info()!=Success) {
+      // solving failed
+      cout << "solving failed" << endl;
+      return;
+    }
 
-    cout << "x: " << x.rows() << " " << x.cols() << endl;
     //upadate V
     V = MatrixXd(x);
   }
@@ -448,10 +480,12 @@ void laplacianEdit(RowVector3d newHandle, RowVector3d oldHandle, int handleVInd,
     SparseMatrix<double> HomDelta;
     igl::cat(2, Delta, Ones, HomDelta);
 
-
+    // compute uniform Laplace
+    SparseMatrix<double> LaplacePrime(V.rows(), V.rows());
+    computeLaplace(Vprime, LaplacePrime, numberNeighbours, N, cotanMode);
     SparseMatrix<double> DeltaPrime;
     SparseMatrix<double> VPrimeSparse = Vprime.sparseView();
-    DeltaPrime = Laplace * VPrimeSparse;
+    DeltaPrime = LaplacePrime * VPrimeSparse;
 
     SparseMatrix<double> HomDeltaPrime;
     igl::cat(2, DeltaPrime, Ones, HomDeltaPrime);
@@ -526,6 +560,8 @@ void laplacianEdit(RowVector3d newHandle, RowVector3d oldHandle, int handleVInd,
         T << Coeff(0, 0), -Coeff(3, 0), Coeff(2, 0), Coeff(4, 0), Coeff(3, 0), Coeff(0, 0), -Coeff(1, 0),
                 Coeff(5, 0), -Coeff(2, 0), Coeff(1, 0), Coeff(0, 0), Coeff(6, 0), 0, 0, 0, 1;
 
+
+
         // update V_i
         VectorXd currentRow(4);
         currentRow(0) = V(simulatedIndices(i),0);
@@ -581,16 +617,16 @@ void initGUI() {
         handleY = float(handle(1));
         handleZ = float(handle(2));
         posROI = handle/2.0;
-        drawBoundBox(boundMax, boundMin, posROI, 1.0, 1.0, 1.0);
+        drawBoundBox(boundMax, boundMin, posROI, 1.2, 1.2, 1.2);
       }
       ImGui::Separator();
 
       // ROI Controls
       ImGui::Text("ROI Controls");
 
-      ImGui::SliderFloat("Length", &lScale, 0.1f, 1.0f);
-      ImGui::SliderFloat("Width", &wScale, 0.1f, 1.0f);
-      ImGui::SliderFloat("Height", &hScale, 0.1f, 1.0f);
+      ImGui::SliderFloat("Length", &lScale, 0.1f, 1.2f);
+      ImGui::SliderFloat("Width", &wScale, 0.1f, 1.2f);
+      ImGui::SliderFloat("Height", &hScale, 0.1f, 1.2f);
 
       if (ImGui::Button("Increase X")) {
         posROI(0) = posROI(0) + (0.01 * boundDiag);
@@ -634,6 +670,9 @@ void initGUI() {
           if (isContained(V.row(r))) {
             v_roi.push_back(r);
           }
+          else{
+            constraints.push_back(r);
+          }
         }
       }
       // Shade ROI for Visual Inspection
@@ -660,9 +699,10 @@ void initGUI() {
       ImGui::Text("Laplacian Editing");
       ImGui::Checkbox("Use Cotan", &cotanMode);
       ImGui::Checkbox("Simple Cost", &simpleCostMode);
+      ImGui::Checkbox("Evaluation", &evaluation);
 
       if (ImGui::Button("Execute", ImVec2(-1,0))) {
-        laplacianEdit(RowVector3d(double(handleX), double(handleY), double(handleZ)), handle, handleInd, v_roi, V);
+        laplacianEdit(RowVector3d(double(handleX), double(handleY), double(handleZ)), handle, handleInd, v_roi, V, constraints);
       }
       ImGui::Separator();
 
