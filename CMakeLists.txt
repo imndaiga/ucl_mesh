@@ -2,11 +2,6 @@ cmake_minimum_required(VERSION 3.1)
 project(cw3)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
-# set(THIRD_PARTY_DIR C:/Users/wndai/Libraries)
-set(CMAKE_PREFIX_PATH ${THIRD_PARTY_DIR}/libigl)
-set(CMAKE_LIBRARY_PATH ${THIRD_PARTY_DIR}/libigl)
-
-include_directories(${THIRD_PARTY_DIR}/libigl/include)
 
 # libigl
 option(LIBIGL_USE_STATIC_LIBRARY "Use libigl as static library" OFF)

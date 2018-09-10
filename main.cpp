@@ -29,7 +29,7 @@ MatrixXd C, V, origV, boxV(8, 3), AA, AN, ANK, H, K;
 MatrixXi E, F, N, boxE(12, 2);
 RowVector3d boundMin, boundMax, baryC, prevHandle, handle, posROI;
 VectorXd numberNeighbours;
-string offModel = "wave_low";
+string offModel = "cow";
 vector<int> v_roi, constraints;
 vector<T> m_coeffs, c_coeffs, l_coeffs;
 
@@ -241,7 +241,7 @@ bool mouseDownCallback(igl::opengl::glfw::Viewer& viewer, int, int) {
   double y = viewer.core.viewport(3) - viewer.current_mouse_y;
   float minDist;
 
-  if (igl::unproject_onto_mesh(Vector2f(x,y), viewer.core.view * viewer.core.model,
+  if (igl::unproject_onto_mesh(Vector2f(x,y), viewer.core.view,
     viewer.core.proj, viewer.core.viewport, V, F, fid, baryC) && mode != NO_MODE)
   {
     C = MatrixXd::Constant(F.rows(), 3, 1);
@@ -586,7 +586,7 @@ void initGUI() {
   viewer.plugins.push_back(& menu);
 
   // Add content to the default menu window
-  menu.draw_viewer_menu_func = [&]() {
+  menu.callback_draw_viewer_menu = [&]() {
     // Draw parent menu content
     // menu.draw_viewer_menu();
 
