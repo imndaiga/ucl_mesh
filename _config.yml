@@ -1,3 +1,5 @@
 theme: jekyll-theme-minimal
+plugins:
+  - jemoji
 title: Mesh Deformation
 description: The project is an implementation of the mesh deformation approach detailed by Sorkine et al.
