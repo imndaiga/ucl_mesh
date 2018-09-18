@@ -1,5 +1,3 @@
-# Mesh Deformation
-
 Introduction
 ---------------
 
